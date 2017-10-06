@@ -1,0 +1,93 @@
+server {
+    listen      %ip%:%web_port%;
+    server_name %domain_idn% %alias_idn%;
+    root        %docroot%;
+    index       index.php index.html index.htm;
+    access_log  /var/log/nginx/domains/%domain%.log combined;
+    access_log  /var/log/nginx/domains/%domain%.bytes bytes;
+    error_log   /var/log/nginx/domains/%domain%.error.log error;
+
+    #by javamagnetic
+
+    # Redirect HTTP to HTTPS
+    if ($scheme = http) {
+        return 301 https://$server_name$request_uri;
+    }
+
+    location = /sitemap.xml {
+        rewrite ^(.*)$ /index.php?route=feed/google_sitemap break; 
+    } 
+
+    location = /googlebase.xml {
+        rewrite ^(.*)$ /index.php?route=feed/google_base break; 
+    } 
+
+    location / {
+        # This try_files directive is used to enable SEO-friendly URLs for OpenCart
+        try_files $uri $uri/ @opencart;
+    }
+
+    location @opencart {
+        rewrite ^/(.+)$ /index.php?_route_=$1 last;
+    }
+
+
+    location ~* ^.+\.(jpeg|jpg|png|gif|bmp|ico|svg|css|js)$ {
+        expires     max;
+    }
+
+    # Make sure files with the following extensions do not get loaded by nginx because nginx would display the source code, and these files can contain PASSWORDS!
+
+    location ~* \.(engine|inc|info|install|make|module|profile|test|po|sh|.*sql|theme|tpl|twig(\.php)?|xtmpl)$|^(\..*|Entries.*|Repository|Root|Tag|Template)$|\.php_ {
+    deny all;
+    }
+
+    # Deny all attempts to access hidden files such as .htaccess, .htpasswd, .DS_Store (Mac).
+
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    location ~*  \.(jpg|jpeg|png|gif|css|js|ico)$ {
+        expires max;
+        log_not_found off;
+    }  
+
+    location ~ [^/]\.php(/|$) {
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        if (!-f $document_root$fastcgi_script_name) {
+        return  404;
+        }
+
+        fastcgi_pass    %backend_lsnr%;
+        fastcgi_index   index.php;
+        include         /etc/nginx/fastcgi_params;
+    }
+
+    error_page  403 /error/404.html;
+    error_page  404 /error/404.html;
+    error_page  500 502 503 504 /error/50x.html;
+
+    location /error/ {
+        alias   %home%/%user%/web/%domain%/document_errors/;
+    }
+
+    location ~* "/\.(htaccess|htpasswd)$" {
+        deny    all;
+        return  404;
+    }
+
+    location /vstats/ {
+        alias   %home%/%user%/web/%domain%/stats/;
+        include %home%/%user%/web/%domain%/stats/auth.conf*;
+    }
+
+    include     /etc/nginx/conf.d/phpmyadmin.inc*;
+    include     /etc/nginx/conf.d/phppgadmin.inc*;
+    include     /etc/nginx/conf.d/webmail.inc*;
+
+    include     %home%/%user%/conf/web/nginx.%domain%.conf*;
+
+}
